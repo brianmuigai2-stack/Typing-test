@@ -2,103 +2,97 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <title>Typing Speed Test — Fixed Timer</title>
-  <style>
-    body { font-family: system-ui, Arial, sans-serif; padding: 24px; max-width: 700px; margin:auto; }
-    h2 { margin-bottom: 8px; }
-    #text { font-size: 1.4rem; margin: 18px 0; line-height: 1.8rem; user-select: none; }
-    #input { width: 100%; font-size: 1.1rem; padding: 10px; box-sizing: border-box; }
-    .correct { color: #1b7a1b; }   /* green */
-    .wrong   { color: #b12b2b; text-decoration: underline wavy; } /* red */
-    #controls { margin-top: 12px; display:flex; gap:8px; align-items:center; }
-    button { padding: 8px 12px; border-radius:6px; border:1px solid #ccc; background:#f7f7f7; cursor:pointer; }
-    #result { margin-top: 16px; font-weight:600; }
-    small { color:#666; }
-  </style>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Typing Speed Test — Interactive</title>
+  <link rel="stylesheet" href="style.css">
 </head>
 <body>
-  <h2>Typing Speed Test</h2>
-  <div id="text" aria-live="polite"></div>
-  <input id="input" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" placeholder="Start typing here..." />
-  <div id="controls">
-    <button id="restart">Restart</button>
-    <small>Tip: focus the input and start typing — timer starts on first keystroke.</small>
+  <div class="wrap" id="app">
+    <header>
+      <div>
+        <h1>Typing Speed Test</h1>
+        <div class="small">Start typing in the box — timer starts on first keystroke.</div>
+
+        <div class="status" aria-hidden="false">
+          <div class="stat">Live WPM: <span id="liveWpm">0</span></div>
+          <div class="stat">Accuracy: <span id="liveAcc">100%</span></div>
+          <div class="stat">Mistakes: <span id="mistakes">0</span></div>
+          <div class="stat">Best WPM: <span id="bestWpm">—</span></div>
+        </div>
+      </div>
+
+      <div class="controls" role="group" aria-label="controls">
+        <label class="small" for="difficulty">Difficulty</label>
+        <select id="difficulty" aria-label="Choose difficulty">
+          <option value="short">Short</option>
+          <option value="medium" selected>Medium</option>
+          <option value="long">Long</option>
+        </select>
+
+        <!-- theme toggle has a tooltip via title and aria-describedby -->
+        <div class="toggle" id="themeToggle" role="button" aria-pressed="false"
+             title="Toggle dark mode (click to toggle). Preference saved." aria-describedby="themeHint">
+          🌗 <span class="small">Theme</span>
+        </div>
+        <div id="themeHint" class="visually-hidden">Click to toggle dark mode — preference saved.</div>
+
+        <div class="actions">
+          <button id="restart" class="ghost" title="Restart (Ctrl+R)">Restart</button>
+          <button id="next" class="btn" title="Next sentence (Enter)">Next</button>
+        </div>
+      </div>
+    </header>
+
+    <main>
+      <div id="text" aria-live="polite"></div>
+
+      <div class="progress-wrap" aria-hidden="true">
+        <div class="progress" id="progress"></div>
+      </div>
+
+      <div class="input-row">
+        <input id="input" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"
+               placeholder="Click here and start typing..." aria-label="Typing input" />
+        <div style="width:140px;text-align:center">
+          <div class="small">Time</div>
+          <div class="primary" id="timer">0.0s</div>
+        </div>
+      </div>
+
+      <div class="meta-row">
+        <div class="small">Tip: backspace to fix mistakes. <kbd>Ctrl+R</kbd> restart, <kbd>Enter</kbd> next.</div>
+        <div class="small">Characters: <span id="charCount">0</span></div>
+      </div>
+
+      <section class="keyboard-section" aria-hidden="true">
+        <h2>Animated Keyboard</h2>
+        <div id="keyboard" class="keyboard" aria-hidden="true"></div>
+        <div id="hand" class="hand" aria-hidden="true">👉</div>
+      </section>
+
+      <section class="leaderboard-section">
+        <h2>Leaderboard</h2>
+        <div class="leaderboard">
+          <div class="leaderboard-controls">
+            <div>
+              <button id="clearLeaderboard" class="ghost">Clear</button>
+              <button id="exportLeaderboard" class="ghost">Export JSON</button>
+            </div>
+            <small class="small">Top 10 runs (local)</small>
+          </div>
+          <ol id="leaderboardList"></ol>
+        </div>
+      </section>
+
+      <footer>
+        <div class="results" id="result">Not started yet.</div>
+        <div class="small">© Typing Test</div>
+      </footer>
+    </main>
   </div>
-  <div id="result" aria-live="polite"></div>
 
-  <script>
-    const textElement = document.getElementById('text');
-    const input = document.getElementById('input');
-    const result = document.getElementById('result');
-    const restartBtn = document.getElementById('restart');
+  <canvas id="confettiCanvas" aria-hidden="true"></canvas>
 
-    // The sentence to type — change as needed
-    const sentence = "JavaScript makes typing tests fun!";
-    textElement.innerHTML = sentence.split('').map(ch => `<span>${ch}</span>`).join('');
-    const spans = textElement.querySelectorAll('span');
-
-    let startTime = null;
-    let finished = false;
-
-    // Helper: reset state
-    function reset() {
-      input.value = '';
-      spans.forEach(s => s.classList.remove('correct', 'wrong'));
-      startTime = null;
-      finished = false;
-      result.textContent = '';
-      input.disabled = false;
-      input.focus();
-    }
-
-    // Start fresh on load
-    reset();
-
-    input.addEventListener('input', () => {
-      const typed = input.value.split('');
-
-      // Start timer on first visible character typed
-      if (startTime === null && input.value.length > 0) {
-        startTime = Date.now();
-      }
-
-      // Update each span's class based on typed characters
-      spans.forEach((span, i) => {
-        const char = typed[i];
-        if (char == null) {
-          span.classList.remove('correct', 'wrong');
-        } else if (char === span.textContent) {
-          span.classList.add('correct');
-          span.classList.remove('wrong');
-        } else {
-          span.classList.add('wrong');
-          span.classList.remove('correct');
-        }
-      });
-
-      // Completion detection: every span must have class 'correct'
-      const allCorrect = Array.from(spans).every(s => s.classList.contains('correct', 'wrong') === false && s.classList.contains('correct'));
-
-      if (allCorrect && !finished && startTime !== null) {
-        finished = true;
-        const endTime = Date.now();
-        const timeTakenSec = (endTime - startTime) / 1000;
-        const correctChars = spans.length;               // all characters are correct at this point
-        const typedChars = input.value.length || 0;
-
-        // WPM: (correctChars / 5) words, per minute
-        const wpm = Math.round((correctChars / 5) * (60 / timeTakenSec));
-
-        // Accuracy: correctChars / typedChars (guard against division by zero)
-        const accuracy = typedChars === 0 ? 100 : Math.round((correctChars / typedChars) * 100);
-
-        result.innerHTML = `✅ Completed! Time: ${timeTakenSec.toFixed(1)}s<br>Speed: <strong>${wpm}</strong> WPM<br>Accuracy: <strong>${accuracy}%</strong>`;
-        input.disabled = true;
-      }
-    });
-
-    // Restart button
-    restartBtn.addEventListener('click', reset);
-  </script>
+  <script src="index.js"></script>
 </body>
 </html>
