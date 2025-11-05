@@ -1,4 +1,4 @@
-// index.js — updated: more reliable celebration (audio resume + confetti ctx check)
+// index.js — updated: more reliable celebration + theme cycling + finish-on-length
 
 // ----------------------- Elements -----------------------
 const textEl = document.getElementById('text');
@@ -102,13 +102,13 @@ function sampleSentence(diff) {
 }
 
 function renderSentence(s) {
-  textEl.innerHTML = '';
+  textEl && (textEl.innerHTML = '');
   s.split('').forEach(ch => {
     const span = document.createElement('span');
     span.textContent = ch === ' ' ? ' ' : ch;
-    textEl.appendChild(span);
+    textEl && textEl.appendChild(span);
   });
-  spans = Array.from(textEl.querySelectorAll('span'));
+  spans = textEl ? Array.from(textEl.querySelectorAll('span')) : [];
   if (charCountEl) charCountEl.textContent = spans.length;
   refreshCaret(0);
 }
@@ -124,7 +124,7 @@ function resetState() {
   sentence = sampleSentence(currentDifficulty);
   renderSentence(sentence);
   if (input) input.value = '';
-  if (input) input.disabled = false; // ensure enabled
+  if (input) input.disabled = false;
   startTime = null;
   finished = false;
   if (liveTimerInterval) { clearInterval(liveTimerInterval); liveTimerInterval = null; }
@@ -138,7 +138,7 @@ function resetState() {
 }
 
 function computeStats() {
-  const typed = input.value.split('');
+  const typed = input ? input.value.split('') : [];
   let correctChars = 0;
   let mistakes = 0;
   spans.forEach((span, i) => {
@@ -156,7 +156,7 @@ function computeStats() {
   if (liveWpmEl) liveWpmEl.textContent = wpm;
   if (liveAccEl) liveAccEl.textContent = `${accuracy}%`;
   if (mistakesEl) mistakesEl.textContent = mistakes;
-  if (progressEl) progressEl.style.width = Math.min(100, Math.round((typedChars / spans.length) * 100)) + '%';
+  if (progressEl && spans.length > 0) progressEl.style.width = Math.min(100, Math.round((typedChars / spans.length) * 100)) + '%';
   refreshCaret(typedChars);
   return { typedChars, correctChars, mistakes, elapsed, wpm, accuracy };
 }
@@ -221,7 +221,6 @@ function applyTheme(theme) {
     themeToggle && themeToggle.setAttribute('aria-pressed','true');
     themeToggle && (themeToggle.title = 'Theme: Colorful — click to change');
   } else {
-    // light = default (remove attribute)
     document.documentElement.removeAttribute('data-theme');
     themeToggle && themeToggle.setAttribute('aria-pressed','false');
     themeToggle && (themeToggle.title = 'Theme: Light — click to change');
@@ -238,7 +237,6 @@ themeToggle && themeToggle.addEventListener('click', ()=>{
 
 // ----------------------- Updated finishIfComplete (reliable celebration) -----------------------
 function finishIfComplete(stats) {
-  // stats contains: typedChars, correctChars, mistakes, elapsed, wpm, accuracy
   const typedChars = stats.typedChars;
   const correctChars = stats.correctChars;
 
@@ -266,27 +264,21 @@ function finishIfComplete(stats) {
     saveBestWpm(wpm);
     addLeaderboardEntry({ wpm, accuracy, time: timeTaken, date: new Date().toISOString() });
 
-    // detect perfect run using stats
     const isPerfect = (correctChars === spans.length);
 
-    // run celebration after a short delay to avoid timing races and allow audio resume
     setTimeout(() => {
-      // try to resume audio if suspended (some browsers require resume on user gesture)
       if (audioCtx && typeof audioCtx.resume === 'function' && audioCtx.state === 'suspended') {
         audioCtx.resume().catch(()=>{/* ignore */});
       }
-
       if (isPerfect) {
-        try { playWin(); } catch (e) { /* ignore */ }
-        try { confettiBurst(); } catch (e) { /* ignore */ }
-      } else {
-        // mild feedback optional
+        try { playWin(); } catch (e) {}
+        try { confettiBurst(); } catch (e) {}
       }
     }, 60);
   }
 }
 
-// ----------------------- Leaderboard -----------------------
+// ----------------------- Leaderboard / storage utils -----------------------
 function loadLeaderboard(){ try{ const raw = localStorage.getItem(LEADER_KEY); return raw ? JSON.parse(raw) : []; }catch(e){return [];} }
 function saveLeaderboard(list){ localStorage.setItem(LEADER_KEY, JSON.stringify(list)); }
 function addLeaderboardEntry(entry){
@@ -386,7 +378,7 @@ input && input.addEventListener('input', (e)=>{
   const typed = input.value;
   if (typed.length > 0) {
     const last = typed[typed.length-1];
-    playClick(); // key sound (if allowed by browser)
+    playClick();
     highlightKeyForChar(last);
   }
   const stats = computeStats();
@@ -423,7 +415,12 @@ difficultySelect && difficultySelect.addEventListener('change', (e)=>{ currentDi
 // keyboard shortcuts
 window.addEventListener('keydown', (e)=>{
   if (e.ctrlKey && e.shiftKey && e.key.toLowerCase()==='r'){ e.preventDefault(); resetState(); }
-  else if (e.key === 'Enter'){ e.preventDefault(); nextBtn && nextBtn.click(); }
+  else if (e.key === 'Enter'){ 
+    // prevent double-firing when input already handled it
+    const active = document.activeElement;
+    if (active && active.tagName.toLowerCase() === 'input') return;
+    e.preventDefault(); nextBtn && nextBtn.click(); 
+  }
 });
 
 // ----------------------- Init -----------------------
