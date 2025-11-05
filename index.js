@@ -1,4 +1,4 @@
-// app.js — fully self-contained logic (matches the HTML IDs above)
+// index.js — updated: more reliable celebration (audio resume + confetti ctx check)
 
 // ----------------------- Elements -----------------------
 const textEl = document.getElementById('text');
@@ -124,7 +124,7 @@ function resetState() {
   sentence = sampleSentence(currentDifficulty);
   renderSentence(sentence);
   if (input) input.value = '';
-  if (input) input.disabled = false;
+  if (input) input.disabled = false; // ensure enabled
   startTime = null;
   finished = false;
   if (liveTimerInterval) { clearInterval(liveTimerInterval); liveTimerInterval = null; }
@@ -161,36 +161,130 @@ function computeStats() {
   return { typedChars, correctChars, mistakes, elapsed, wpm, accuracy };
 }
 
+// ----------------------- Confetti (robust) -----------------------
+function resizeConfetti(){
+  if (!confettiCanvas) return;
+  confettiCanvas.width = window.innerWidth;
+  confettiCanvas.height = window.innerHeight;
+}
+
+function confettiBurst(){
+  if (!confettiCanvas) return;
+  const ctx = confettiCanvas.getContext ? confettiCanvas.getContext('2d') : null;
+  if (!ctx) return;
+  resizeConfetti();
+
+  const pieces = [];
+  const colors = ['#ef476f','#ffd166','#06d6a0','#118ab2','#073b4c','#7c3aed'];
+  for(let i=0;i<120;i++){
+    pieces.push({
+      x: Math.random()*confettiCanvas.width,
+      y: Math.random()*-confettiCanvas.height,
+      vx: (Math.random()-0.5)*6,
+      vy: 2 + Math.random()*6,
+      size: 6 + Math.random()*8,
+      color: colors[Math.floor(Math.random()*colors.length)],
+      rot: Math.random()*360,
+      spin: (Math.random()-0.5)*8
+    });
+  }
+  let t = 0;
+  const anim = () => {
+    t++;
+    ctx.clearRect(0,0,confettiCanvas.width,confettiCanvas.height);
+    pieces.forEach(p=>{
+      p.x += p.vx; p.y += p.vy; p.rot += p.spin;
+      ctx.save();
+      ctx.translate(p.x,p.y);
+      ctx.rotate(p.rot * Math.PI/180);
+      ctx.fillStyle = p.color;
+      ctx.fillRect(-p.size/2, -p.size/2, p.size, p.size);
+      ctx.restore();
+    });
+    if (t < 200) requestAnimationFrame(anim);
+    else ctx.clearRect(0,0,confettiCanvas.width,confettiCanvas.height);
+  };
+  anim();
+}
+window.addEventListener('resize', resizeConfetti);
+
+// ----------------------- Theme: cycle light -> dark -> colorful -----------------------
+const THEME_ORDER = ['light','dark','colorful'];
+
+function applyTheme(theme) {
+  if (theme === 'dark') {
+    document.documentElement.setAttribute('data-theme', 'dark');
+    themeToggle && themeToggle.setAttribute('aria-pressed','true');
+    themeToggle && (themeToggle.title = 'Theme: Dark — click to change');
+  } else if (theme === 'colorful') {
+    document.documentElement.setAttribute('data-theme', 'colorful');
+    themeToggle && themeToggle.setAttribute('aria-pressed','true');
+    themeToggle && (themeToggle.title = 'Theme: Colorful — click to change');
+  } else {
+    // light = default (remove attribute)
+    document.documentElement.removeAttribute('data-theme');
+    themeToggle && themeToggle.setAttribute('aria-pressed','false');
+    themeToggle && (themeToggle.title = 'Theme: Light — click to change');
+  }
+  try { localStorage.setItem(THEME_KEY, theme); } catch(e) {}
+}
+
+themeToggle && themeToggle.addEventListener('click', ()=>{
+  const current = localStorage.getItem(THEME_KEY) || 'light';
+  const idx = THEME_ORDER.indexOf(current);
+  const next = THEME_ORDER[(idx + 1) % THEME_ORDER.length];
+  applyTheme(next);
+});
+
+// ----------------------- Updated finishIfComplete (reliable celebration) -----------------------
 function finishIfComplete(stats) {
-  const allCorrect = spans.length > 0 && spans.every(sp => sp.classList.contains('correct'));
-  if (allCorrect && !finished && startTime !== null) {
+  // stats contains: typedChars, correctChars, mistakes, elapsed, wpm, accuracy
+  const typedChars = stats.typedChars;
+  const correctChars = stats.correctChars;
+
+  // Finish when the user has typed at least as many characters as the sentence
+  if (!finished && startTime !== null && typedChars >= spans.length) {
     finished = true;
+
+    // disable input and stop the live timer
     if (input) input.disabled = true;
-    if (liveTimerInterval){ clearInterval(liveTimerInterval); liveTimerInterval=null; }
+    if (liveTimerInterval) { clearInterval(liveTimerInterval); liveTimerInterval = null; }
+
     const timeTaken = stats.elapsed;
     const wpm = stats.wpm;
     const accuracy = stats.accuracy;
     const mistakes = stats.mistakes;
-    if (resultEl) resultEl.innerHTML = `✅ Completed! Time: <strong>${timeTaken.toFixed(1)}s</strong><br>
-      Speed: <strong>${wpm}</strong> WPM<br>
-      Accuracy: <strong>${accuracy}%</strong><br>
-      Mistakes: <strong>${mistakes}</strong>`;
+
+    if (resultEl) {
+      resultEl.innerHTML = `✅ Completed! Time: <strong>${timeTaken.toFixed(1)}s</strong><br>
+        Speed: <strong>${wpm}</strong> WPM<br>
+        Accuracy: <strong>${accuracy}%</strong><br>
+        Mistakes: <strong>${mistakes}</strong>`;
+    }
+
+    // save and record
     saveBestWpm(wpm);
     addLeaderboardEntry({ wpm, accuracy, time: timeTaken, date: new Date().toISOString() });
-    playWin();
-    confettiBurst();
+
+    // detect perfect run using stats
+    const isPerfect = (correctChars === spans.length);
+
+    // run celebration after a short delay to avoid timing races and allow audio resume
+    setTimeout(() => {
+      // try to resume audio if suspended (some browsers require resume on user gesture)
+      if (audioCtx && typeof audioCtx.resume === 'function' && audioCtx.state === 'suspended') {
+        audioCtx.resume().catch(()=>{/* ignore */});
+      }
+
+      if (isPerfect) {
+        try { playWin(); } catch (e) { /* ignore */ }
+        try { confettiBurst(); } catch (e) { /* ignore */ }
+      } else {
+        // mild feedback optional
+      }
+    }, 60);
   }
 }
-
-function saveBestWpm(wpm) {
-  if (!wpm || wpm <= 0) return;
-  const best = parseInt(localStorage.getItem(BEST_KEY) || '0', 10);
-  if (wpm > best) {
-    localStorage.setItem(BEST_KEY, String(wpm));
-    if (bestWpmEl) bestWpmEl.textContent = `${wpm} ✨`;
-  } else { if (bestWpmEl) bestWpmEl.textContent = best ? String(best) : '—'; }
-}
-function loadBestWpm(){ const best = parseInt(localStorage.getItem(BEST_KEY) || '0',10); if (bestWpmEl) bestWpmEl.textContent = best ? String(best) : '—'; }
 
 // ----------------------- Leaderboard -----------------------
 function loadLeaderboard(){ try{ const raw = localStorage.getItem(LEADER_KEY); return raw ? JSON.parse(raw) : []; }catch(e){return [];} }
@@ -279,47 +373,6 @@ window.addEventListener('keyup', (e)=>{
   if (el) el.classList.remove('active');
 });
 
-// ----------------------- Confetti (simple) -----------------------
-const confettiCtx = confettiCanvas && confettiCanvas.getContext ? confettiCanvas.getContext('2d') : null;
-let confettiPieces = [];
-function resizeConfetti(){ if(confettiCanvas){ confettiCanvas.width = window.innerWidth; confettiCanvas.height = window.innerHeight; } }
-function confettiBurst(){
-  if (!confettiCtx) return;
-  resizeConfetti();
-  confettiPieces = [];
-  const colors = ['#ef476f','#ffd166','#06d6a0','#118ab2','#073b4c','#7c3aed'];
-  for(let i=0;i<120;i++){
-    confettiPieces.push({
-      x: Math.random()*confettiCanvas.width,
-      y: Math.random()*-confettiCanvas.height,
-      vx: (Math.random()-0.5)*6,
-      vy: 2 + Math.random()*6,
-      size: 6 + Math.random()*8,
-      color: colors[Math.floor(Math.random()*colors.length)],
-      rot: Math.random()*360,
-      spin: (Math.random()-0.5)*8
-    });
-  }
-  let t = 0;
-  const anim = () => {
-    t++;
-    confettiCtx.clearRect(0,0,confettiCanvas.width,confettiCanvas.height);
-    confettiPieces.forEach(p=>{
-      p.x += p.vx; p.y += p.vy; p.rot += p.spin;
-      confettiCtx.save();
-      confettiCtx.translate(p.x,p.y);
-      confettiCtx.rotate(p.rot * Math.PI/180);
-      confettiCtx.fillStyle = p.color;
-      confettiCtx.fillRect(-p.size/2, -p.size/2, p.size, p.size);
-      confettiCtx.restore();
-    });
-    if (t < 200) requestAnimationFrame(anim);
-    else confettiCtx.clearRect(0,0,confettiCanvas.width,confettiCanvas.height);
-  };
-  anim();
-}
-window.addEventListener('resize', resizeConfetti);
-
 // ----------------------- Events -----------------------
 input && input.addEventListener('input', (e)=>{
   if (finished) return;
@@ -341,11 +394,23 @@ input && input.addEventListener('input', (e)=>{
   finishIfComplete(stats);
 });
 
+// Enter inside input -> next sentence
+input && input.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') {
+    e.preventDefault();
+    nextBtn && nextBtn.click();
+  }
+});
+
 restartBtn && restartBtn.addEventListener('click', ()=> resetState());
 nextBtn && nextBtn.addEventListener('click', ()=>{
   sentence = sampleSentence(currentDifficulty);
   renderSentence(sentence);
-  if (input) input.value = ''; startTime = null; finished=false;
+
+  if (input) { input.value = ''; input.disabled = false; }
+  startTime = null;
+  finished = false;
+
   if (timerEl) timerEl.textContent='0.0s';
   if (resultEl) resultEl.textContent = 'New sentence loaded. Start typing!';
   if (liveWpmEl) liveWpmEl.textContent='0'; if (liveAccEl) liveAccEl.textContent='100%'; if (mistakesEl) mistakesEl.textContent='0';
@@ -355,24 +420,9 @@ nextBtn && nextBtn.addEventListener('click', ()=>{
 });
 difficultySelect && difficultySelect.addEventListener('change', (e)=>{ currentDifficulty = e.target.value; resetState(); });
 
-// theme toggle: save immediately on click
-themeToggle && themeToggle.addEventListener('click', ()=>{
-  const root = document.documentElement;
-  const now = root.getAttribute('data-theme');
-  if (now === 'dark') {
-    root.removeAttribute('data-theme');
-    themeToggle.setAttribute('aria-pressed','false');
-    localStorage.setItem(THEME_KEY,'light');
-  } else {
-    root.setAttribute('data-theme','dark');
-    themeToggle.setAttribute('aria-pressed','true');
-    localStorage.setItem(THEME_KEY,'dark');
-  }
-});
-
-// keyboard shortcuts (D removed)
+// keyboard shortcuts
 window.addEventListener('keydown', (e)=>{
-  if (e.ctrlKey && e.key.toLowerCase()==='r'){ e.preventDefault(); resetState(); }
+  if (e.ctrlKey && e.shiftKey && e.key.toLowerCase()==='r'){ e.preventDefault(); resetState(); }
   else if (e.key === 'Enter'){ e.preventDefault(); nextBtn && nextBtn.click(); }
 });
 
@@ -381,9 +431,21 @@ function init(){
   buildKeyboard();
   loadBestWpm();
   renderLeaderboard();
-  // theme from storage (apply immediately)
-  const t = localStorage.getItem(THEME_KEY) || 'light';
-  if (t === 'dark'){ document.documentElement.setAttribute('data-theme','dark'); themeToggle && themeToggle.setAttribute('aria-pressed','true'); }
+  const storedTheme = localStorage.getItem(THEME_KEY) || 'light';
+  applyTheme(storedTheme);
   resetState();
 }
 init();
+
+// ----------------------- Utils left as-is (save/load best etc.) -----------------------
+function saveBestWpm(wpm) {
+  if (!wpm || wpm <= 0) return;
+  const best = parseInt(localStorage.getItem(BEST_KEY) || '0', 10);
+  if (wpm > best) {
+    localStorage.setItem(BEST_KEY, String(wpm));
+    if (bestWpmEl) bestWpmEl.textContent = `${wpm} ✨`;
+  } else { if (bestWpmEl) bestWpmEl.textContent = best ? String(best) : '—'; }
+}
+function loadBestWpm(){ const best = parseInt(localStorage.getItem(BEST_KEY) || '0',10); if (bestWpmEl) bestWpmEl.textContent = best ? String(best) : '—'; }
+function loadLeaderboard(){ try{ const raw = localStorage.getItem(LEADER_KEY); return raw ? JSON.parse(raw) : []; }catch(e){return [];} }
+function saveLeaderboard(list){ localStorage.setItem(LEADER_KEY, JSON.stringify(list)); }

@@ -19,6 +19,149 @@
   --glass: rgba(255,255,255,0.03);
 }
 
+/* ---------- Colorful theme — BIGGER impact ---------- */
+[data-theme="colorful"]{
+  --bg: #0f0410;                      /* deep base for contrast */
+  --card: rgba(255,255,255,0.03);
+  --text: #fff9fe;
+  --muted: #f0e6f6;
+  --accent: #ff3d7f;                  /* pink */
+  --accent-2: #7c3aed;                /* purple */
+  --accent-3: #06d6a0;                /* teal */
+  --accent-grad: linear-gradient(45deg, #ff3d7f 0%, #7c3aed 40%, #06d6a0 100%);
+  --good: #06d6a0;
+  --bad: #ff6b6b;
+  --glass: rgba(255,255,255,0.04);
+}
+
+/* animated background overlay behind the page for dramatic look */
+[data-theme="colorful"] body::before{
+  content:"";
+  position:fixed;
+  inset:0;
+  z-index: -2;
+  background: conic-gradient(from 120deg at 30% 30%, #ff416c, #7c3aed, #06d6a0, #ffd166, #ff416c);
+  filter: blur(48px) saturate(120%);
+  opacity: 0.65;
+  animation: colorfulSpin 18s linear infinite;
+  transform: scale(1.2);
+  pointer-events: none;
+}
+
+/* subtle animated sheen on the app card */
+[data-theme="colorful"] .wrap{
+  background: linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.02));
+  border: 1px solid rgba(255,255,255,0.06);
+  box-shadow: 0 20px 60px rgba(124,58,237,0.18), inset 0 1px 0 rgba(255,255,255,0.03);
+  position: relative;
+  overflow: visible;
+}
+
+/* rotating shimmer */
+[data-theme="colorful"] .wrap::after{
+  content:"";
+  position:absolute;
+  left:-40%;
+  top:-30%;
+  width:180%;
+  height:160%;
+  background: linear-gradient(120deg, rgba(255,255,255,0.00), rgba(255,255,255,0.03), rgba(255,255,255,0.00));
+  transform: rotate(-24deg);
+  pointer-events:none;
+  animation: sheen 6s ease-in-out infinite;
+  mix-blend-mode: overlay;
+}
+
+/* animated gradient button + stronger shadow */
+[data-theme="colorful"] .btn{
+  background: var(--accent);
+  background-image: var(--accent-grad);
+  background-size: 200% 200%;
+  animation: buttonGradient 4s ease infinite;
+  color: white;
+  box-shadow: 0 12px 36px rgba(124,58,237,0.16);
+  border: none;
+}
+
+/* lively progress stripe + moving pattern */
+[data-theme="colorful"] .progress{
+  background: linear-gradient(90deg,var(--accent),var(--accent-2),var(--accent-3));
+  background-size: 300% 100%;
+  animation: progressShift 6s linear infinite;
+  box-shadow: 0 6px 18px rgba(124,58,237,0.12);
+}
+
+/* more visible caret underline */
+[data-theme="colorful"] #text .current{
+  text-decoration-color: #ffd166;
+  text-decoration-thickness: 3px;
+}
+
+/* keyboard key glow */
+[data-theme="colorful"] .key{
+  background: linear-gradient(180deg, rgba(255,255,255,0.02), transparent);
+  border: 1px solid rgba(255,255,255,0.04);
+}
+[data-theme="colorful"] .key.active{
+  transform: translateY(6px) scale(0.985);
+  background: linear-gradient(180deg, rgba(255,255,255,0.06), rgba(255,255,255,0.02));
+  box-shadow: 0 12px 30px rgba(124,58,237,0.18), 0 0 18px rgba(255,65,108,0.08);
+  border-color: rgba(255,255,255,0.14);
+}
+
+/* stat badges punchier */
+[data-theme="colorful"] .stat{
+  background: linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0));
+  border: none;
+  padding:10px 12px;
+  font-weight:700;
+  color:var(--text);
+  box-shadow: 0 6px 20px rgba(124,58,237,0.08);
+}
+
+/* results card highlight */
+[data-theme="colorful"] .results{
+  border: none;
+  background: linear-gradient(180deg, rgba(255,255,255,0.01), rgba(255,255,255,0));
+  box-shadow: 0 10px 30px rgba(124,58,237,0.06);
+  color: var(--text);
+}
+
+/* small flourish on leaderboard items */
+[data-theme="colorful"] ol#leaderboardList li strong{ color: var(--accent); text-shadow: 0 2px 6px rgba(124,58,237,0.06); }
+
+/* animated accent outlines on input focus */
+[data-theme="colorful"] #input:focus{
+  box-shadow: 0 8px 30px rgba(124,58,237,0.08), 0 0 10px rgba(255,65,108,0.04);
+  border-color: rgba(255,255,255,0.14);
+  outline: none;
+}
+
+/* optional: make confetti colors a touch brighter for this theme */
+[data-theme="colorful"] #confettiCanvas{ mix-blend-mode: screen; }
+
+/* ----- Keyframes ----- */
+@keyframes colorfulSpin{
+  0%{ transform: scale(1.2) rotate(0deg); filter: blur(48px) saturate(120%); }
+  50%{ transform: scale(1.25) rotate(180deg); filter: blur(60px) saturate(140%); }
+  100%{ transform: scale(1.2) rotate(360deg); filter: blur(48px) saturate(120%); }
+}
+@keyframes sheen{
+  0%{ transform: translateX(-30%) rotate(-24deg) scale(1); opacity:0.06; }
+  50%{ transform: translateX(30%) rotate(-24deg) scale(1.05); opacity:0.12; }
+  100%{ transform: translateX(-30%) rotate(-24deg) scale(1); opacity:0.06; }
+}
+@keyframes buttonGradient{
+  0%{ background-position: 0% 50%; }
+  50%{ background-position: 100% 50%; }
+  100%{ background-position: 0% 50%; }
+}
+@keyframes progressShift{
+  0%{ background-position: 0% 50%; }
+  100%{ background-position: 300% 50%; }
+}
+
+/* ---------- Base styles (unchanged) ---------- */
 *{box-sizing:border-box}
 body{
   font-family: Inter, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
@@ -145,7 +288,7 @@ footer{display:flex;justify-content:space-between;align-items:center;margin-top:
 }
 
 /* leaderboard */
-.leaderboard-section{margin-top:18px}
+.leaderboard-section{Margin-top:18px}
 .leaderboard{padding:12px;border-radius:8px;border:1px solid var(--glass);background:linear-gradient(180deg, rgba(255,255,255,0.01), transparent)}
 .leaderboard-controls{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
 ol#leaderboardList{padding-left:18px;margin:0}
